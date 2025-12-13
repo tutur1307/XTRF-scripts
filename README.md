@@ -96,9 +96,3 @@ Example:
 - Scripts only work on the XTRF dashboard.
 - No data is modified.
 - Renaming Smart Views or removing required columns may disable a script.
-
----
-
-## License
-
-MIT License
