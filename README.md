@@ -12,8 +12,8 @@ The scripts are read-only and only affect the visual display.
 - Colors the **Job Status** column:
   - **Open** → red
   - **Offers sent / requested** → blue
-- Applies only to the Smart View named:
 
+Smart View title:
 Requested / Open
 
 
@@ -26,8 +26,8 @@ Requested / Open
 - Started
 - Accepted
 - Offers sent / requested
-- Smart View title:
 
+Smart View title:
 Jobs due today and earlier
 
 
@@ -40,7 +40,6 @@ Rows are highlighted as follows:
 - **Light blue**: deadline today, more than one hour away
 
 Smart View title:
-
 Projects due today
 
 
