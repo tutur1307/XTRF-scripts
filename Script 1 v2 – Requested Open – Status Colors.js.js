@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         XTRF – Requested / Open status colors + Pretty palette selector [OK]
+// @name         Script 1 – Requested / Open – Status Colors
 // @namespace    http://tampermonkey.net/
-// @version      3.5
+// @version      3.5 - 25-12-16
 // @description  Script 1 (ciblage table fiable) + palette (v6 traverse iframes) + popover modern + 🎨 button
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
 // @match        https://translations.myelan.net/*

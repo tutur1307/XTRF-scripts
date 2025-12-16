@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         XTRF – Projects due today deadline highlighter [OK]
+// @name         Script 2 – Projects due today – Deadline urgency
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.1 - 25-12-16
 // @description  Highlights rows based on deadline (overdue / within 1 hour / later today) - OVERFLOWS into other views on purpose
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
 // @grant        none
