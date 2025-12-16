@@ -24,8 +24,11 @@
 
   /** Widgets to process (widget header -> replacement empty message) */
   const WIDGETS = [
-    { title: "Requests pending",     message: "No pending requests" },
-    { title: "Projects due today",   message: "Congrats, all done for today! 🎉" }
+    { title: "Requests pending", message: "No pending requests 🤖" },
+    { title: "Projects due today", message: "Congrats, all done for today! 🎉" },
+    { title: "Projects ready for finalization", message: "Good job, all done... For now! 🌱" },
+    { title: "Projects still to be started", message: "You're on a rrrrrroll! 🐯" },
+    { title: "Requested / Open", message: "It's empty in here... 🍃" },
   ];
 
   /* =========================================================
