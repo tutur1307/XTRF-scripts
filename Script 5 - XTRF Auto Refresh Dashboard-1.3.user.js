@@ -220,8 +220,7 @@
       </div>
 
       <div style="color:rgba(0,0,0,0.65);line-height:1.25;">
-        Targets: only <b>Smart View iframes</b> (genericBrowseIFrame).<br/>
-        Tip: hover a widget to refresh only it.
+        Choose the interval of time for the automatic page refresh here.<br/>
       </div>
     `;
 
