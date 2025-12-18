@@ -1,36 +1,45 @@
 // ==UserScript==
-// @name         Script 5 - XTRF Auto Refresh Dashboard
+// @name         Script 5 - XTRF Auto Refresh Dashboard (Toolbar Clone, Standalone)
 // @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  Adds manual + auto refresh for Smart Views (only genericBrowseIFrame), styled exactly like the Palette button
+// @version      2.4.0
+// @description  Manual + auto refresh for Smart Views (genericBrowseIFrame). No hover targeting. Buttons are cloned from the top toolbar for perfect alignment. Auto button shows a small dot when enabled. No badge.
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
 
 (function () {
-  'use strict';
+  "use strict";
 
   /* -----------------------------
      CONFIG
   ----------------------------- */
 
-  const STORAGE_KEY = 'xtrf_sv_refresh_cfg_v1';
-  const DEFAULT_CFG = { enabled: false, value: 60, unit: 's' }; // 60 seconds
+  const STORAGE_KEY = "xtrf_sv_refresh_cfg_v6";
+  const DEFAULT_CFG = { enabled: false, value: 60, unit: "s" }; // 60 seconds
   const MIN_SECONDS = 5;
+
   const REFRESH_GAP_MS = 450; // sequential delay between iframe reloads
   const RESCAN_MS = 700;
 
+  const BTN_MANUAL_ID = "xtrf_sv_manual_refresh";
+  const BTN_AUTO_ID = "xtrf_sv_auto_refresh";
+  const PANEL_ID = "xtrf_sv_auto_panel";
+
   let cfg = loadCfg();
   let autoTimer = null;
-  let panelEl = null;
 
-  // track hovered card (so refresh can target a single widget)
-  let lastHoveredCard = null;
+  let panelEl = null;
+  let autoBtn = null;
+  let manualBtn = null;
 
   /* -----------------------------
-     STORAGE
+     UTILS
   ----------------------------- */
+
+  function normalize(s) {
+    return (s || "").replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+  }
 
   function loadCfg() {
     try {
@@ -48,7 +57,7 @@
   function secondsFromCfg() {
     let s = Number(cfg.value || 0);
     if (!Number.isFinite(s)) s = DEFAULT_CFG.value;
-    if (cfg.unit === 'm') s = s * 60;
+    if (cfg.unit === "m") s = s * 60;
     s = Math.max(MIN_SECONDS, Math.floor(s));
     return s;
   }
@@ -58,104 +67,151 @@
   ----------------------------- */
 
   function isSmartViewIframe(iframe) {
-    const src = (iframe.getAttribute('src') || '').toLowerCase();
-    return src.includes('genericbrowseiframe.seam');
+    const src = (iframe.getAttribute("src") || "").toLowerCase();
+    return src.includes("genericbrowseiframe.seam");
   }
 
   function getSmartViewIframes(scopeEl = document) {
-    return Array.from(scopeEl.querySelectorAll('iframe')).filter(isSmartViewIframe);
+    return Array.from(scopeEl.querySelectorAll("iframe")).filter(isSmartViewIframe);
+  }
+
+  function reloadIframe(iframe) {
+    try {
+      iframe.contentWindow.location.reload();
+      return;
+    } catch (_) {}
+
+    try {
+      const src = iframe.getAttribute("src");
+      if (src) iframe.setAttribute("src", src);
+    } catch (_) {}
   }
 
   async function reloadIframesSequential(iframes) {
     for (const iframe of iframes) {
-      try {
-        iframe.contentWindow.location.reload();
-      } catch (_) {
-        // ignore
-      }
-      await new Promise(r => setTimeout(r, REFRESH_GAP_MS));
+      reloadIframe(iframe);
+      await new Promise((r) => setTimeout(r, REFRESH_GAP_MS));
     }
   }
 
   /* -----------------------------
-     UI – find anchor & clone palette style
+     TOP TOOLBAR (clone positioning like Script 7)
   ----------------------------- */
 
   function findEditDashboardButton() {
-    return Array.from(document.querySelectorAll('button, a')).find(el =>
-      (el.textContent || '').trim().toLowerCase() === 'edit dashboard'
-    ) || null;
+    return (
+      Array.from(document.querySelectorAll("button, a")).find(
+        (el) => normalize(el.textContent).toLowerCase() === "edit dashboard"
+      ) || null
+    );
   }
 
-  function findPaletteButtonNearEdit() {
-    // Your layout: [Edit Dashboard] [Palette] [↻] [⏱️]
-    // We try to find the button with a palette emoji OR title contains palette close to Edit Dashboard
-    const edit = findEditDashboardButton();
-    if (!edit) return null;
-
-    const parent = edit.parentElement;
-    if (!parent) return null;
-
-    const buttons = Array.from(parent.querySelectorAll('button, a'));
-    // best guess: first button after Edit Dashboard
-    const editIndex = buttons.indexOf(edit);
-    if (editIndex >= 0 && buttons[editIndex + 1]) return buttons[editIndex + 1];
-
-    // fallback by text/title
-    return buttons.find(b => {
-      const t = (b.textContent || '').trim().toLowerCase();
-      const title = (b.getAttribute('title') || '').trim().toLowerCase();
-      return t.includes('🎨') || t === 'palette' || title.includes('palette');
-    }) || null;
+  function findTopButtonsContainer() {
+    const editBtn = findEditDashboardButton();
+    if (!editBtn) return null;
+    return editBtn.parentElement || null;
   }
 
-  function clonePaletteButton(paletteBtn, id, title) {
-    // Clone deeply to inherit internal structure/icons if any
-    const btn = paletteBtn.cloneNode(true);
+  function pickTemplateButton(container) {
+    const buttons = Array.from(container.querySelectorAll("button, a"));
+    const editBtn = findEditDashboardButton();
 
-    // Safety: remove any existing listeners by replacing with a fresh clone
-    // (cloneNode already does not carry listeners)
+    // Prefer a "small" icon-like button (short text), else any sibling, else Edit itself.
+    const small = buttons.find((b) => {
+      const txt = normalize(b.textContent);
+      return b !== editBtn && txt.length <= 3;
+    });
+
+    return small || buttons.find((b) => b !== editBtn) || editBtn || null;
+  }
+
+  function makeClonedIconButton(templateBtn, id, title, iconText, onClick) {
+    const btn = templateBtn.cloneNode(true);
 
     btn.id = id;
+    btn.setAttribute("title", title);
 
-    // Ensure it behaves like a button (sometimes anchor)
-    if (btn.tagName.toLowerCase() === 'a') {
-      // keep as <a> if XTRF uses it, but prevent navigation
-      btn.setAttribute('href', '#');
-    } else {
-      btn.type = 'button';
-    }
+    // Prevent any original behavior
+    btn.removeAttribute("onclick");
+    btn.removeAttribute("ng-click");
+    btn.removeAttribute("href");
+    btn.type = "button";
 
-    btn.setAttribute('title', title);
-
-    // wipe any palette-specific attributes that might interfere
-    btn.removeAttribute('onclick');
-
-    // Normalize inner content (we just show a symbol)
-    // Try to keep the same internal padding/alignment by reusing existing child structure if possible
-    // but simplest is set textContent; XTRF buttons usually still look correct.
-    btn.textContent = '';
-
-    // Create inner span so layout matches (many UI kits expect a child)
-    const span = document.createElement('span');
-    span.style.display = 'inline-flex';
-    span.style.alignItems = 'center';
-    span.style.justifyContent = 'center';
-    span.style.width = '100%';
-    span.style.height = '100%';
-    span.textContent = '•';
+    // Replace visible content with our icon (keeps original padding/structure)
+    btn.textContent = "";
+    const span = document.createElement("span");
+    span.style.display = "inline-flex";
+    span.style.alignItems = "center";
+    span.style.justifyContent = "center";
+    span.style.width = "100%";
+    span.style.height = "100%";
+    span.textContent = iconText;
     btn.appendChild(span);
 
-    return { btn, span };
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick(span);
+    });
+
+    return btn;
   }
 
-  function setAutoIcon(span) {
-    span.textContent = cfg.enabled ? '⏱️•' : '⏱️';
+  function setAutoIcon(autoSpan) {
+    autoSpan.textContent = cfg.enabled ? "⏱️•" : "⏱️";
   }
 
   /* -----------------------------
-     PANEL (auto refresh settings)
+     PANEL (auto settings)
   ----------------------------- */
+
+  function ensurePanelStyles() {
+    if (document.getElementById("xtrf_sv_panel_style")) return;
+
+    const style = document.createElement("style");
+    style.id = "xtrf_sv_panel_style";
+    style.textContent = `
+      #${PANEL_ID}{
+        position: fixed;
+        z-index: 999999;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 10px;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+        padding: 10px 10px 8px;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        font-size: 12px;
+        min-width: 230px;
+        display: none;
+      }
+      #${PANEL_ID} .row{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin-bottom:8px;
+      }
+      #${PANEL_ID} .close{
+        border:none;
+        background:transparent;
+        cursor:pointer;
+        font-size:14px;
+        line-height:1;
+      }
+      #${PANEL_ID} input[type="number"], #${PANEL_ID} select{
+        padding:6px 8px;
+        border:1px solid rgba(0,0,0,0.2);
+        border-radius:8px;
+        font-size:12px;
+      }
+      #${PANEL_ID} input[type="number"]{ width:88px; }
+      #${PANEL_ID} .muted{
+        color: rgba(0,0,0,0.65);
+        line-height: 1.25;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   function clampPanelToViewport(panel, anchorRect) {
     const pad = 8;
@@ -165,10 +221,10 @@
     let left = anchorRect.left;
     let top = anchorRect.bottom + 8;
 
-    panel.style.left = '0px';
-    panel.style.top = '0px';
-    panel.style.visibility = 'hidden';
-    panel.style.display = 'block';
+    panel.style.left = "0px";
+    panel.style.top = "0px";
+    panel.style.visibility = "hidden";
+    panel.style.display = "block";
 
     const r = panel.getBoundingClientRect();
     const w = r.width;
@@ -179,93 +235,83 @@
 
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
-    panel.style.visibility = 'visible';
+    panel.style.visibility = "visible";
   }
 
-  function buildPanel(autoBtn) {
+  function buildPanel(anchorBtn, autoSpan) {
+    ensurePanelStyles();
+
     if (panelEl) panelEl.remove();
 
-    panelEl = document.createElement('div');
-    panelEl.style.position = 'fixed';
-    panelEl.style.zIndex = '999999';
-    panelEl.style.background = '#fff';
-    panelEl.style.border = '1px solid rgba(0,0,0,0.15)';
-    panelEl.style.borderRadius = '10px';
-    panelEl.style.boxShadow = '0 10px 24px rgba(0,0,0,0.18)';
-    panelEl.style.padding = '10px 10px 8px';
-    panelEl.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial';
-    panelEl.style.fontSize = '12px';
-    panelEl.style.minWidth = '230px';
-    panelEl.style.display = 'none';
+    panelEl = document.createElement("div");
+    panelEl.id = PANEL_ID;
 
     panelEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <div class="row">
         <div style="font-weight:600;">Auto-refresh</div>
-        <button id="xtrf_sv_close" style="border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+        <button class="close" type="button" title="Close">✕</button>
       </div>
 
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <label class="row" style="justify-content:flex-start;">
         <input id="xtrf_sv_enable" type="checkbox" />
         <span>Enable</span>
       </label>
 
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <input id="xtrf_sv_value" type="number" min="${MIN_SECONDS}" step="1"
-               style="width:88px;padding:6px 8px;border:1px solid rgba(0,0,0,0.2);border-radius:8px;" />
-        <select id="xtrf_sv_unit"
-                style="padding:6px 8px;border:1px solid rgba(0,0,0,0.2);border-radius:8px;">
+      <div class="row" style="justify-content:flex-start;">
+        <input id="xtrf_sv_value" type="number" min="${MIN_SECONDS}" step="1" />
+        <select id="xtrf_sv_unit">
           <option value="s">seconds</option>
           <option value="m">minutes</option>
         </select>
       </div>
 
-      <div style="color:rgba(0,0,0,0.65);line-height:1.25;">
-        Choose the interval of time for the automatic page refresh here.<br/>
-      </div>
+      <div class="muted">Choose the interval for the automatic refresh.</div>
     `;
 
     document.body.appendChild(panelEl);
 
-    const closeBtn = panelEl.querySelector('#xtrf_sv_close');
-    const enableCb = panelEl.querySelector('#xtrf_sv_enable');
-    const valueIn = panelEl.querySelector('#xtrf_sv_value');
-    const unitSel = panelEl.querySelector('#xtrf_sv_unit');
+    const closeBtn = panelEl.querySelector(".close");
+    const enableCb = panelEl.querySelector("#xtrf_sv_enable");
+    const valueIn = panelEl.querySelector("#xtrf_sv_value");
+    const unitSel = panelEl.querySelector("#xtrf_sv_unit");
 
     enableCb.checked = !!cfg.enabled;
     valueIn.value = cfg.value;
     unitSel.value = cfg.unit;
 
-    closeBtn.addEventListener('click', () => (panelEl.style.display = 'none'));
+    closeBtn.addEventListener("click", () => (panelEl.style.display = "none"));
 
     function applyCfg() {
       cfg.value = Math.max(MIN_SECONDS, Number(valueIn.value || MIN_SECONDS));
-      cfg.unit = unitSel.value === 'm' ? 'm' : 's';
+      cfg.unit = unitSel.value === "m" ? "m" : "s";
       const want = enableCb.checked;
 
       saveCfg();
 
       if (want) startAuto();
       else stopAuto();
+
+      setAutoIcon(autoSpan);
+      anchorBtn.title = cfg.enabled ? `Auto-refresh ON (${secondsFromCfg()}s)` : "Auto-refresh settings";
     }
 
-    enableCb.addEventListener('change', applyCfg);
-    valueIn.addEventListener('change', applyCfg);
-    unitSel.addEventListener('change', applyCfg);
+    enableCb.addEventListener("change", applyCfg);
+    valueIn.addEventListener("change", applyCfg);
+    unitSel.addEventListener("change", applyCfg);
 
-    // outside click close
+    // outside click closes panel
     setTimeout(() => {
-      document.addEventListener('mousedown', (e) => {
-        if (!panelEl) return;
-        if (panelEl.style.display === 'none') return;
+      document.addEventListener("mousedown", (e) => {
+        if (!panelEl || panelEl.style.display === "none") return;
         if (panelEl.contains(e.target)) return;
-        if (autoBtn.contains(e.target)) return;
-        panelEl.style.display = 'none';
+        if (anchorBtn.contains(e.target)) return;
+        panelEl.style.display = "none";
       });
     }, 0);
   }
 
   /* -----------------------------
-     AUTO REFRESH LOGIC
+     AUTO REFRESH
   ----------------------------- */
 
   function stopAuto() {
@@ -281,16 +327,16 @@
     saveCfg();
 
     const tick = async () => {
-      const targets = lastHoveredCard ? getSmartViewIframes(lastHoveredCard) : getSmartViewIframes(document);
+      const targets = getSmartViewIframes(document);
       if (!targets.length) return;
 
       await reloadIframesSequential(targets);
 
-      // If an iframe shows "View has expired", stop auto to avoid loops
+      // Safety: stop if "View has expired" appears (avoids loops)
       try {
         for (const iframe of targets) {
-          const bodyText = (iframe.contentDocument?.body?.innerText || '').toLowerCase();
-          if (bodyText.includes('view has expired')) {
+          const bodyText = (iframe.contentDocument?.body?.innerText || "").toLowerCase();
+          if (bodyText.includes("view has expired")) {
             stopAuto();
             break;
           }
@@ -306,88 +352,61 @@
   ----------------------------- */
 
   function insertButtons() {
-    const editBtn = findEditDashboardButton();
-    const paletteBtn = findPaletteButtonNearEdit();
+    const container = findTopButtonsContainer();
+    if (!container) return false;
 
-    if (!editBtn || !paletteBtn) return false;
-    if (document.getElementById('xtrf_sv_manual_refresh')) return true;
+    if (document.getElementById(BTN_MANUAL_ID) || document.getElementById(BTN_AUTO_ID)) return true;
 
-    // Create two buttons by cloning palette
-    const { btn: manualBtn, span: manualSpan } = clonePaletteButton(
-      paletteBtn,
-      'xtrf_sv_manual_refresh',
-      'Refresh Smart Views (hover a widget to refresh only it)'
-    );
-    manualSpan.textContent = '↻';
+    const templateBtn = pickTemplateButton(container);
+    if (!templateBtn) return false;
 
-    const { btn: autoBtn, span: autoSpan } = clonePaletteButton(
-      paletteBtn,
-      'xtrf_sv_auto_refresh',
-      'Auto-refresh'
-    );
-    setAutoIcon(autoSpan);
-
-    // Insert right after palette button
-    paletteBtn.parentElement.insertBefore(manualBtn, paletteBtn.nextSibling);
-    paletteBtn.parentElement.insertBefore(autoBtn, manualBtn.nextSibling);
-
-    // Actions
-    manualBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (manualBtn.disabled) return;
-
-      manualBtn.disabled = true;
-      try {
-        const targets = lastHoveredCard ? getSmartViewIframes(lastHoveredCard) : getSmartViewIframes(document);
-        await reloadIframesSequential(targets);
-      } finally {
-        setTimeout(() => (manualBtn.disabled = false), 350);
+    // Manual refresh
+    manualBtn = makeClonedIconButton(
+      templateBtn,
+      BTN_MANUAL_ID,
+      "Refresh all Smart Views",
+      "↻",
+      async () => {
+        if (manualBtn.disabled) return;
+        manualBtn.disabled = true;
+        try {
+          const targets = getSmartViewIframes(document);
+          await reloadIframesSequential(targets);
+        } finally {
+          setTimeout(() => (manualBtn.disabled = false), 350);
+        }
       }
-    });
+    );
 
-    autoBtn.addEventListener('click', (e) => {
-      e.preventDefault();
+    // Auto refresh button (icon shows dot when enabled)
+    autoBtn = makeClonedIconButton(
+      templateBtn,
+      BTN_AUTO_ID,
+      "Auto-refresh settings",
+      cfg.enabled ? "⏱️•" : "⏱️",
+      (autoSpan) => {
+        if (!panelEl) buildPanel(autoBtn, autoSpan);
 
-      if (!panelEl) buildPanel(autoBtn);
+        panelEl.style.display = panelEl.style.display === "none" ? "block" : "none";
+        if (panelEl.style.display === "block") {
+          clampPanelToViewport(panelEl, autoBtn.getBoundingClientRect());
+        }
 
-      panelEl.style.display = panelEl.style.display === 'none' ? 'block' : 'none';
-      if (panelEl.style.display === 'block') {
-        const rect = autoBtn.getBoundingClientRect();
-        clampPanelToViewport(panelEl, rect);
+        setAutoIcon(autoSpan);
+        autoBtn.title = cfg.enabled ? `Auto-refresh ON (${secondsFromCfg()}s)` : "Auto-refresh settings";
       }
+    );
 
-      // sync icon every open
-      setAutoIcon(autoSpan);
-      autoBtn.title = cfg.enabled ? `Auto-refresh ON (${secondsFromCfg()}s)` : 'Auto-refresh';
-    });
-
-    // Keep auto icon in sync if auto state changes elsewhere
-    const sync = () => {
-      setAutoIcon(autoSpan);
-      autoBtn.title = cfg.enabled ? `Auto-refresh ON (${secondsFromCfg()}s)` : 'Auto-refresh';
-    };
-
-    // Patch start/stop to sync icon
-    const _startAuto = startAuto;
-    const _stopAuto = stopAuto;
-    startAuto = function () { _startAuto(); sync(); };
-    stopAuto  = function () { _stopAuto();  sync(); };
+    // Insert right after the last existing toolbar button (keeps order clean)
+    container.appendChild(manualBtn);
+    container.appendChild(autoBtn);
 
     // Restore auto if enabled
+    const autoSpan = autoBtn.querySelector("span");
+    if (autoSpan) setAutoIcon(autoSpan);
     if (cfg.enabled) startAuto();
 
     return true;
-  }
-
-  /* -----------------------------
-     HOVER TRACKING
-  ----------------------------- */
-
-  function trackHoveredWidget() {
-    document.addEventListener('mousemove', (e) => {
-      const card = e.target?.closest?.('.x-card');
-      lastHoveredCard = card || null;
-    }, { passive: true });
   }
 
   /* -----------------------------
@@ -395,8 +414,6 @@
   ----------------------------- */
 
   function boot() {
-    trackHoveredWidget();
-
     const t = setInterval(() => {
       const ok = insertButtons();
       if (ok) clearInterval(t);
