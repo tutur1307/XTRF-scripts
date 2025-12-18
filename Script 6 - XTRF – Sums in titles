@@ -1,0 +1,160 @@
+// ==UserScript==
+// @name         Script 6 - XTRF – Projects started today – Total Agreed sum in title
+// @namespace    http://tampermonkey.net/
+// @version      1.1
+// @description  Adds Total Agreed sum to the right of the "Projects started today" widget title
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  /* ===================== CONFIG ===================== */
+
+  const TARGET_VIEW_TITLE = "Projects started today";
+  const REQUIRED_HEADERS = ["Total Agreed"]; // garde-fou pour trouver la bonne table
+  const SUM_HEADER_TEXT = "Total Agreed";
+  const RESCAN_INTERVAL_MS = 1000;
+
+  /* ===================== HELPERS ===================== */
+
+  function normalize(text) {
+    return (text || "")
+      .replace(/\u00A0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function extractHeaderTexts(table) {
+    const headerRow = table?.querySelector("thead tr");
+    if (!headerRow) return [];
+    return Array.from(headerRow.querySelectorAll("th,td")).map(h => normalize(h.textContent));
+  }
+
+  function tableHasRequiredHeaders(table) {
+    const headers = extractHeaderTexts(table);
+    if (!headers.length) return false;
+    return REQUIRED_HEADERS.every(req => headers.some(h => h.includes(normalize(req))));
+  }
+
+  function getColumnIndex(table, headerText) {
+    const headerRow = table?.querySelector("thead tr");
+    if (!headerRow) return -1;
+    const headers = Array.from(headerRow.querySelectorAll("th, td"));
+    for (let i = 0; i < headers.length; i++) {
+      if (normalize(headers[i].textContent).includes(normalize(headerText))) return i;
+    }
+    return -1;
+  }
+
+  // XTRF (chez toi) : "€ 40,220" => 40.220 => afficher 40,22 €
+  function parseXtrfMoney(text) {
+    if (!text) return 0;
+
+    let s = String(text)
+      .replace(/\u00A0/g, " ")
+      .replace(/\s+/g, "")
+      .replace(/[€]/g, "")
+      .trim();
+
+    if (!s) return 0;
+
+    const hasComma = s.includes(",");
+    const hasDot = s.includes(".");
+
+    if (hasComma && hasDot) {
+      // 1.234,567 -> 1234.567
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else if (hasComma && !hasDot) {
+      // 40,220 -> 40.220
+      s = s.replace(/,/g, ".");
+    }
+
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function formatEUR_BE(value) {
+    const amount = Number.isFinite(value) ? value : 0;
+    const formatted = amount.toLocaleString("fr-BE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    return `€${formatted}`;
+  }
+
+  /* ===================== DOM BRIDGE (iframe -> header) ===================== */
+
+  function findHeadingInThisWidgetFromIframe() {
+    const iframeEl = window.frameElement;
+    if (!iframeEl) return null;
+
+    const container =
+      iframeEl.closest?.(".xdb-dashboard__widget, .x-card, .xlt-card, .card, .widget, .x-card__container, .panel")
+      || iframeEl.parentElement;
+
+    if (!container) return null;
+
+    const headings = Array.from(container.querySelectorAll(
+      "h1.x-card__header__heading, h2.x-card__header__heading, h3.x-card__header__heading, .x-card__header__heading, h1, h2, h3"
+    ));
+
+    return headings.find(el => normalize(el.textContent).includes(normalize(TARGET_VIEW_TITLE))) || null;
+  }
+
+  function ensureTitleRightSlot(heading) {
+    if (!heading) return null;
+
+    heading.style.display = "flex";
+    heading.style.alignItems = "center";
+    heading.style.gap = "10px";
+
+    let right = heading.querySelector(".xtrf-title-right-total");
+    if (!right) {
+      right = heading.ownerDocument.createElement("span");
+      right.className = "xtrf-title-right-total";
+      right.style.marginLeft = "auto";
+      right.style.fontWeight = "700";
+      right.style.fontSize = "0.95em";
+      right.style.opacity = "0.9";
+      heading.appendChild(right);
+    }
+    return right;
+  }
+
+  /* ===================== MAIN ===================== */
+
+  function computeAndRender() {
+    const table = Array.from(document.querySelectorAll("table")).find(tableHasRequiredHeaders);
+    if (!table) return;
+
+    const colIdx = getColumnIndex(table, SUM_HEADER_TEXT);
+    if (colIdx < 0) return;
+
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    let sum = 0;
+
+    for (const tr of rows) {
+      const cells = Array.from(tr.querySelectorAll("td,th"));
+      const cell = cells[colIdx];
+      if (!cell) continue;
+      sum += parseXtrfMoney(cell.textContent);
+    }
+
+    const heading = findHeadingInThisWidgetFromIframe();
+    if (!heading) return;
+
+    const rightSlot = ensureTitleRightSlot(heading);
+    if (!rightSlot) return;
+
+    rightSlot.textContent = formatEUR_BE(sum);
+    rightSlot.title = `Somme de "${SUM_HEADER_TEXT}" (lignes visibles)`;
+  }
+
+  setInterval(() => { try { computeAndRender(); } catch (e) {} }, RESCAN_INTERVAL_MS);
+  computeAndRender();
+
+})();
