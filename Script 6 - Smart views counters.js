@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Script 6 - Smart Views counters
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.3.1
 // @description  Adds (N) to specific Smart View titles (hidden when N=0) + adds Total Agreed sum on the right for started today + Requested/Open shows Requested (x) / Open (y)
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
 // @grant        none
@@ -100,6 +100,7 @@
     return getDataRows(table).length;
   }
 
+  // ✅ FIX: le compteur est toujours ajouté à DROITE (fin du titre)
   function ensureCountSpan(heading) {
     let span = heading.querySelector(`.${COUNT_SPAN_CLASS}`);
     if (!span) {
@@ -108,11 +109,10 @@
       span.style.marginLeft = "8px";
       span.style.fontWeight = "700";
       span.style.opacity = "0.85";
-
-      // Keep near title
-      if (heading.firstChild) {
-        heading.insertBefore(span, heading.firstChild.nextSibling);
-      } else {
+      heading.appendChild(span);
+    } else {
+      // si déjà présent mais placé au mauvais endroit, on le remet à la fin
+      if (span.parentElement === heading && span !== heading.lastElementChild) {
         heading.appendChild(span);
       }
     }
@@ -212,8 +212,7 @@
         continue;
       }
 
-      // Offers sent / requested (often truncated to "Offers ...")
-      // We count these as "requested" per your wording.
+      // Offers sent / requested
       if (status.startsWith("offers") || status.includes("offers sent") || status.includes("requested")) {
         requested++;
         continue;
@@ -231,7 +230,6 @@
       oldCount.style.display = "none";
     }
 
-    // Find a text node containing "Requested / Open" so we can inject counts after each label
     const doc = heading.ownerDocument;
 
     // If we already injected before, just return the spans
@@ -248,11 +246,9 @@
       return s;
     }
 
-    // Create spans
     reqSpan = makeSpan(RO_REQ_CLASS);
     openSpan = makeSpan(RO_OPEN_CLASS);
 
-    // Try to split a *text node* that contains the title
     const walker = doc.createTreeWalker(heading, NodeFilter.SHOW_TEXT, null);
     let textNode = null;
 
@@ -265,8 +261,6 @@
     }
 
     if (textNode) {
-      // Replace "Requested / Open" with:
-      // "Requested " + reqSpan + " / Open " + openSpan
       const before = "Requested ";
       const middle = " / Open ";
       const frag = doc.createDocumentFragment();
@@ -277,7 +271,6 @@
 
       textNode.parentNode.replaceChild(frag, textNode);
     } else {
-      // Fallback: append at the start if we couldn't find the title text node
       heading.insertBefore(doc.createTextNode("Requested "), heading.firstChild || null);
       heading.insertBefore(reqSpan, heading.firstChild?.nextSibling || null);
       heading.insertBefore(doc.createTextNode(" / Open "), heading.firstChild?.nextSibling || null);
