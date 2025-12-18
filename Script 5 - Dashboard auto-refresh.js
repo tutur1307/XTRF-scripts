@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Script 5 - XTRF Auto Refresh Dashboard (Toolbar Clone, Standalone)
+// @name         Script 5 - XTRF Auto Refresh Dashboard
 // @namespace    http://tampermonkey.net/
 // @version      2.4.0
 // @description  Manual + auto refresh for Smart Views (genericBrowseIFrame). No hover targeting. Buttons are cloned from the top toolbar for perfect alignment. Auto button shows a small dot when enabled. No badge.
