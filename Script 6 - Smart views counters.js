@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Script 6 - Smart Views counters
 // @namespace    http://tampermonkey.net/
-// @version      1.3.1
-// @description  Adds (N) to specific Smart View titles (hidden when N=0) + adds Total Agreed sum on the right for started today + Requested/Open shows Requested (x) / Open (y)
+// @version      1.4.0
+// @description  Adds row counters to selected Smart Views (hidden when 0). Special handling: Requested/Open split counts. Projects started today shows both row count and Total Agreed sum (right-aligned).
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
 // @grant        none
 // @run-at       document-end
@@ -13,24 +13,39 @@
 
   /* ===================== CONFIG ===================== */
 
-  // Simple (N) widgets
+  /**
+   * Smart Views that should display a simple row counter: (N)
+   * - Hidden when N = 0
+   */
   const COUNT_WIDGET_TITLES = new Set([
     "Projects due today",
     "Requests pending",
     "Projects still to be started",
     "Jobs due today and earlier",
-    "Projects ready for finalization", // <- added
+    "Projects ready for finalization",
+    "Zero payables",
+    "Zero receivables",
+    "Quotes follow-up",
   ]);
 
-  // Special widget: Requested / Open (split by Job Status)
+  /**
+   * Special Smart View: Requested / Open
+   * We split the title into:
+   *   Requested (x) / Open (y)
+   * based on the "Job Status" column values.
+   */
   const REQUESTED_OPEN_TITLE = "Requested / Open";
   const JOB_STATUS_HEADER_TEXT = "Job Status";
 
-  // Started today total sum on the right
+  /**
+   * "Projects started today" (language-robust match via keywords):
+   * - Adds row count (N) next to the title
+   * - Adds Total Agreed sum on the far right
+   */
   const STARTED_TODAY_TITLE_KEYWORDS = ["started today"]; // robust match (Projects/Projets)
   const SUM_HEADER_TEXT = "Total Agreed";
 
-  // CSS classes used for injected elements (unique & stable)
+  // CSS classes used for injected elements (stable & unique)
   const COUNT_SPAN_CLASS = "xtrf-title-rowcount";
   const SUM_SPAN_CLASS = "xtrf-title-totalagreed-sum";
   const RO_REQ_CLASS = "xtrf-ro-requested-count";
@@ -66,6 +81,10 @@
     return keywords.every(k => txt.includes(normalizeLower(k)));
   }
 
+  /**
+   * Locate the widget heading (within the parent document that contains this iframe).
+   * We rely on iframe -> closest widget container -> heading element.
+   */
   function findWidgetHeadingFromIframe() {
     const iframeEl = window.frameElement;
     if (!iframeEl) return null;
@@ -100,7 +119,10 @@
     return getDataRows(table).length;
   }
 
-  // ✅ FIX: le compteur est toujours ajouté à DROITE (fin du titre)
+  /**
+   * Ensure a standard "(N)" counter span exists at the end of the heading.
+   * Always appended at the far right of the text content (but still within the title line).
+   */
   function ensureCountSpan(heading) {
     let span = heading.querySelector(`.${COUNT_SPAN_CLASS}`);
     if (!span) {
@@ -111,7 +133,7 @@
       span.style.opacity = "0.85";
       heading.appendChild(span);
     } else {
-      // si déjà présent mais placé au mauvais endroit, on le remet à la fin
+      // If it exists but was moved elsewhere, force it back to the end.
       if (span.parentElement === heading && span !== heading.lastElementChild) {
         heading.appendChild(span);
       }
@@ -119,8 +141,11 @@
     return span;
   }
 
+  /**
+   * Ensure a right-aligned sum span exists.
+   * We use flex layout on the heading so the sum can be pushed to the far right.
+   */
   function ensureSumSpanRight(heading) {
-    // Flex so we can push sum to far right
     heading.style.display = "flex";
     heading.style.alignItems = "center";
     heading.style.gap = "10px";
@@ -151,7 +176,10 @@
     return -1;
   }
 
-  // XTRF quirk (your instance): "€ 40,220" should be interpreted as 40.220 (=> 40,22 € displayed)
+  /**
+   * Money parsing for your XTRF instance:
+   * Example: "€ 40,220" is interpreted as 40.220 (=> displayed as €40,22 with fr-BE formatting).
+   */
   function parseXtrfMoney(text) {
     if (!text) return 0;
 
@@ -223,7 +251,7 @@
   }
 
   function ensureInlineSplitInHeading(heading) {
-    // Remove the old "(...)" counter for this widget if present (we don't want it anymore)
+    // If a generic (N) counter exists for this widget, hide it (we use split counters instead).
     const oldCount = heading.querySelector(`.${COUNT_SPAN_CLASS}`);
     if (oldCount) {
       oldCount.textContent = "";
@@ -232,7 +260,6 @@
 
     const doc = heading.ownerDocument;
 
-    // If we already injected before, just return the spans
     let reqSpan = heading.querySelector(`.${RO_REQ_CLASS}`);
     let openSpan = heading.querySelector(`.${RO_OPEN_CLASS}`);
     if (reqSpan && openSpan) return { reqSpan, openSpan };
@@ -249,6 +276,8 @@
     reqSpan = makeSpan(RO_REQ_CLASS);
     openSpan = makeSpan(RO_OPEN_CLASS);
 
+    // Replace the existing text node containing "Requested / Open" with:
+    // "Requested " + reqSpan + " / Open " + openSpan
     const walker = doc.createTreeWalker(heading, NodeFilter.SHOW_TEXT, null);
     let textNode = null;
 
@@ -261,16 +290,15 @@
     }
 
     if (textNode) {
-      const before = "Requested ";
-      const middle = " / Open ";
       const frag = doc.createDocumentFragment();
-      frag.appendChild(doc.createTextNode(before));
+      frag.appendChild(doc.createTextNode("Requested "));
       frag.appendChild(reqSpan);
-      frag.appendChild(doc.createTextNode(middle));
+      frag.appendChild(doc.createTextNode(" / Open "));
       frag.appendChild(openSpan);
 
       textNode.parentNode.replaceChild(frag, textNode);
     } else {
+      // Fallback: just prepend at the start if we couldn't find the exact text node.
       heading.insertBefore(doc.createTextNode("Requested "), heading.firstChild || null);
       heading.insertBefore(reqSpan, heading.firstChild?.nextSibling || null);
       heading.insertBefore(doc.createTextNode(" / Open "), heading.firstChild?.nextSibling || null);
@@ -309,14 +337,19 @@
 
     const table = getPrimaryTable();
 
-    // 1) Requested / Open inline split
+    // 1) Requested / Open: split counts inline
     if (titleContains(heading.textContent, REQUESTED_OPEN_TITLE)) {
       updateRequestedOpenInline(heading, table);
     }
 
-    // 2) Simple (N) counters
+    // 2) Simple (N) counters (includes "Projects started today" as well, see below)
     const matchedCountTitle = titleMatchesOneOf(heading.textContent, COUNT_WIDGET_TITLES);
-    if (matchedCountTitle) {
+    const isStartedToday = titleMatchesKeywords(heading.textContent, STARTED_TODAY_TITLE_KEYWORDS);
+
+    // We want "(N)" for:
+    // - any title in COUNT_WIDGET_TITLES
+    // - AND also for the "started today" widget (even though it also gets a sum on the right)
+    if (matchedCountTitle || isStartedToday) {
       const countSpan = ensureCountSpan(heading);
       const n = getRowCount(table);
 
@@ -329,8 +362,8 @@
       }
     }
 
-    // 3) Started today sum on the right
-    if (titleMatchesKeywords(heading.textContent, STARTED_TODAY_TITLE_KEYWORDS)) {
+    // 3) Started today: sum on the far right
+    if (isStartedToday) {
       const sumSpan = ensureSumSpanRight(heading);
       const n = getRowCount(table);
 
