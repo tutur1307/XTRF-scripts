@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Script 4 – Dashboard Theme + Dark Mode
 // @namespace    http://tampermonkey.net/
-// @version      1.4.8
-// @description  Dark mode dashboard + smart views inside iframes. Keeps other scripts' colors (overdue/status). Palette included. Cleans up in light mode.
+// @version      1.5.3
+// @description  Dark mode dashboard + smart views inside iframes. Keeps other scripts' colors (overdue/status). Palette included. Cleans up in light mode. + Font size + Hover intensity (FULL table content) + Font override toggle
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
 // @grant        none
@@ -21,6 +21,13 @@
     radius: 22,
     shadowEnabled: true,
     darkMode: false,
+
+    // NEW
+    fontSize: 13.0,          // 8 → 16 (step 0.25)
+    hoverIntensity: 0.35,    // 0 → 1 (clair → foncé)
+
+    // NEW (toggle)
+    fontOverride: true       // true = impose our font size, false = let XTRF handle it
   };
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -36,6 +43,12 @@
       if (typeof saved.radius === "number") t.radius = clamp(saved.radius, 0, 40);
       if (typeof saved.shadowEnabled === "boolean") t.shadowEnabled = saved.shadowEnabled;
       if (typeof saved.darkMode === "boolean") t.darkMode = saved.darkMode;
+
+      if (typeof saved.fontSize === "number") t.fontSize = clamp(saved.fontSize, 8, 16);
+      if (typeof saved.hoverIntensity === "number") t.hoverIntensity = clamp(saved.hoverIntensity, 0, 1);
+
+      // NEW
+      if (typeof saved.fontOverride === "boolean") t.fontOverride = saved.fontOverride;
     }
     return t;
   }
@@ -64,13 +77,18 @@
     el.textContent = css;
   }
 
+  function hoverAlphaFromIntensity(intensity) {
+    const minA = 0.01;
+    const maxA = 0.22;
+    return minA + (maxA - minA) * clamp(intensity, 0, 1);
+  }
+
   function setVars(theme) {
     const lightCard = "rgba(255,255,255,0.92)";
     const lightInner = "rgba(255,255,255,0.92)";
     const lightHeader = "rgba(0,0,0,0.03)";
     const lightBorder = "rgba(0,0,0,0.10)";
     const lightGrid = "rgba(0,0,0,0.10)";
-    const lightHover = "rgba(0,0,0,0.04)";
 
     const darkBg = "rgba(31,42,42,1)";
     const darkCard = "rgba(34,34,34,0.92)";
@@ -79,14 +97,22 @@
     const darkHeader = "rgba(85,85,85,0.96)";
     const darkBorder = "rgba(255,255,255,0.14)";
     const darkGrid = "rgba(255,255,255,0.10)";
-    const darkHover = "rgba(255,255,255,0.06)";
     const darkText = "rgba(255,255,255,0.92)";
 
     const canvasBg = theme.darkMode ? darkBg : rgbaFromHex(theme.bgColor, theme.bgAlpha);
 
+    const hoverA = hoverAlphaFromIntensity(theme.hoverIntensity);
+    const hoverColor = theme.darkMode
+      ? `rgba(255,255,255,${hoverA})`
+      : `rgba(0,0,0,${hoverA})`;
+
     document.documentElement.style.setProperty("--xtrf-bg", canvasBg);
     document.documentElement.style.setProperty("--xtrf-radius", `${theme.radius}px`);
     document.documentElement.style.setProperty("--xtrf-shadow", theme.shadowEnabled ? "0 14px 36px rgba(0,0,0,0.22)" : "none");
+
+    // We still set the var, but we only APPLY it when fontOverride=true
+    document.documentElement.style.setProperty("--xtrf-font-size", `${clamp(theme.fontSize, 8, 16)}px`);
+    document.documentElement.style.setProperty("--xtrf-hover", hoverColor);
 
     if (theme.darkMode) {
       document.documentElement.style.setProperty("--xtrf-card-bg", darkCard);
@@ -95,7 +121,6 @@
       document.documentElement.style.setProperty("--xtrf-card-header-bg", darkHeader);
       document.documentElement.style.setProperty("--xtrf-border", darkBorder);
       document.documentElement.style.setProperty("--xtrf-grid", darkGrid);
-      document.documentElement.style.setProperty("--xtrf-hover", darkHover);
       document.documentElement.style.setProperty("--xtrf-text", darkText);
     } else {
       document.documentElement.style.setProperty("--xtrf-card-bg", lightCard);
@@ -104,7 +129,6 @@
       document.documentElement.style.setProperty("--xtrf-card-header-bg", lightHeader);
       document.documentElement.style.setProperty("--xtrf-border", lightBorder);
       document.documentElement.style.setProperty("--xtrf-grid", lightGrid);
-      document.documentElement.style.setProperty("--xtrf-hover", lightHover);
       document.documentElement.style.setProperty("--xtrf-text", "inherit");
     }
   }
@@ -113,7 +137,44 @@
     setVars(theme);
     document.documentElement.classList.toggle("xtrf-darkmode", !!theme.darkMode);
 
+    // ✅ IMPORTANT: enforce font-size on table containers AND their inner content (ONLY if fontOverride=true)
+    const fontTargets = theme.fontOverride ? `
+      html, body { font-size: var(--xtrf-font-size) !important; line-height: 1.25 !important; }
+
+      table, thead, tbody, tfoot, tr, th, td,
+      .x-table, .x-table__head, .x-table__body,
+      .x-table th, .x-table td,
+      .ui-grid, .ui-grid-render-container, .ui-grid-viewport,
+      .ui-grid-row, .ui-grid-cell,
+      .ui-grid-cell-contents,
+      .ui-grid-header, .ui-grid-header-cell,
+      .ui-grid-header-cell-label,
+      .ui-grid-header-cell-wrapper,
+      .ui-grid-pager-panel,
+      .ui-grid-pager-panel * {
+        font-size: var(--xtrf-font-size) !important;
+        line-height: 1.25 !important;
+      }
+
+      /* Force inner spans/links/divs inside cells to follow the cell font-size */
+      td *, th *,
+      .x-table td *, .x-table th *,
+      .x-table__body *, .x-table__head *,
+      .ui-grid-cell *, .ui-grid-cell-contents *,
+      .ui-grid-header-cell *, .ui-grid-header-cell-label * {
+        font-size: inherit !important;
+        line-height: inherit !important;
+      }
+
+      /* Inputs/buttons (usually desired) */
+      .x-btn, button, input, select, textarea {
+        font-size: var(--xtrf-font-size) !important;
+      }
+    ` : ``;
+
     const parentCSS = `
+      ${fontTargets}
+
       html, body { background: var(--xtrf-bg) !important; }
       .x-grid { background: var(--xtrf-bg) !important; }
       .x-grid > * { background-color: transparent !important; }
@@ -154,7 +215,7 @@
       .xtrf-darkmode header *,
       .xtrf-darkmode .navbar * { color: var(--xtrf-text) !important; }
 
-      /* NEW: force the very top tabs bar (Dashboard / Classic dashboard) */
+      /* Force the very top tabs bar (Dashboard / Classic dashboard) */
       .xtrf-darkmode ul.nav-tabs,
       .xtrf-darkmode .nav-tabs,
       .xtrf-darkmode .nav-tabs > li,
@@ -191,6 +252,8 @@
     `;
 
     const iframeCSS = `
+      ${fontTargets}
+
       /* Dark-only base */
       .xtrf-darkmode html, .xtrf-darkmode body {
         background: var(--xtrf-card-inner) !important;
@@ -218,7 +281,7 @@
         box-shadow: none !important;
       }
 
-      /* NEW: Header hover: keep one single state (no darkening on hover) */
+      /* Header hover: keep one single state (no darkening on hover) */
       .xtrf-darkmode thead th:hover,
       .xtrf-darkmode .ui-grid-header-cell:hover,
       .xtrf-darkmode .x-table__head th:hover {
@@ -251,8 +314,10 @@
         box-shadow: none !important;
       }
 
+      /* Hover on rows (intensity-controlled) */
       .xtrf-darkmode tr:hover,
-      .xtrf-darkmode .ui-grid-row:hover {
+      .xtrf-darkmode .ui-grid-row:hover,
+      tr:hover, .ui-grid-row:hover {
         background: var(--xtrf-hover) !important;
       }
 
@@ -434,6 +499,35 @@
       </section>
 
       <section style="padding:10px;border-radius:14px;border:1px solid rgba(0,0,0,0.08); margin-bottom:12px;">
+        <div style="font-weight:650;margin-bottom:8px;">Typography</div>
+
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;">
+          <input type="checkbox" id="fontOverride" ${theme.fontOverride ? "checked" : ""}>
+          <span>Use custom font size</span>
+        </label>
+
+        <div id="fontSizeRow" style="display:flex;align-items:center;justify-content:space-between;gap:10px;${theme.fontOverride ? "" : "opacity:.40;"}">
+          <label style="opacity:.85;">Font size</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" id="fontSize" min="8" max="16" step="0.25" value="${theme.fontSize}"
+              style="width:180px;cursor:pointer;" ${theme.fontOverride ? "" : "disabled"}>
+            <span id="fontSizeVal" style="min-width:44px;text-align:right;opacity:.85;">${Number(theme.fontSize).toFixed(2)}</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="padding:10px;border-radius:14px;border:1px solid rgba(0,0,0,0.08); margin-bottom:12px;">
+        <div style="font-weight:650;margin-bottom:8px;">Hover</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <label style="opacity:.85;">Intensity</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" id="hoverIntensity" min="0" max="1" step="0.01" value="${theme.hoverIntensity}" style="width:180px;cursor:pointer;">
+            <span id="hoverVal" style="min-width:44px;text-align:right;opacity:.85;">${Math.round(theme.hoverIntensity * 100)}%</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="padding:10px;border-radius:14px;border:1px solid rgba(0,0,0,0.08); margin-bottom:12px;">
         <div style="font-weight:650;margin-bottom:8px;">Mode</div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
           <input type="checkbox" id="dark" ${theme.darkMode ? "checked" : ""}>
@@ -457,23 +551,46 @@
     const shadow  = $("#shadow");
     const dark    = $("#dark");
 
+    const fontOverride = $("#fontOverride");
+    const fontSize = $("#fontSize");
+    const fontSizeVal = $("#fontSizeVal");
+    const fontSizeRow = $("#fontSizeRow");
+
+    const hoverIntensity = $("#hoverIntensity");
+    const hoverVal = $("#hoverVal");
+
     function themeFromUI() {
       return {
         bgColor: bgColor.value,
         bgAlpha: parseFloat(bgAlpha.value),
         radius: parseInt(radius.value, 10),
         shadowEnabled: !!shadow.checked,
-        darkMode: !!dark.checked
+        darkMode: !!dark.checked,
+
+        fontOverride: !!fontOverride.checked,
+        fontSize: parseFloat(fontSize.value),
+        hoverIntensity: parseFloat(hoverIntensity.value)
       };
     }
 
+    function syncFontControls() {
+      const enabled = !!fontOverride.checked;
+      fontSize.disabled = !enabled;
+      fontSizeRow.style.opacity = enabled ? "1" : "0.40";
+    }
+
     function preview() {
+      syncFontControls();
+
+      fontSizeVal.textContent = Number(fontSize.value).toFixed(2);
+      hoverVal.textContent = `${Math.round(parseFloat(hoverIntensity.value) * 100)}%`;
+
       const t = themeFromUI();
       saveTheme(t);
       applyTheme(t, "parent");
     }
 
-    [bgColor, bgAlpha, radius, shadow, dark].forEach(el => {
+    [bgColor, bgAlpha, radius, shadow, dark, fontSize, hoverIntensity, fontOverride].forEach(el => {
       el.addEventListener("input", preview);
       el.addEventListener("change", preview);
     });
@@ -493,6 +610,8 @@
       closePopover();
     });
 
+    // initial
+    syncFontControls();
     preview();
 
     document.addEventListener("pointerdown", onOutsidePointerDown, true);
