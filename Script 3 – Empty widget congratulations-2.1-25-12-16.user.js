@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Script 3 – Empty widget congratulations
 // @namespace    http://tampermonkey.net/
-// @version      2.1 - 25-12-16
+// @version      2.1
 // @description  Replaces the "No items to display." empty-state text with a custom message + light green highlight for selected dashboard widgets
 // @match        https://translations.myelan.net/*
 // @grant        none
