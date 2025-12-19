@@ -211,11 +211,9 @@
       .join("");
 
     popup.innerHTML = `
-      <div class="xtrf-title">Row details</div>
+      <div class="xtrf-title">Overview</div>
       ${rowsHtml || `<div class="xtrf-row"><div class="xtrf-label">Info</div><div class="xtrf-value">No non-empty cells found.</div></div>`}
       <div class="xtrf-hint">
-        ${HIDE_EMPTY_VALUES ? "Empty values hidden." : "Empty values shown."}
-        ${DEDUPE_IDENTICAL_VALUES ? " Duplicate values hidden." : ""}
         ${truncated ? ` (Truncated to ${MAX_ITEMS_SHOWN} items)` : ""}
       </div>
     `;
