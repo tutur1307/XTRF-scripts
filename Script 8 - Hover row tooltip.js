@@ -15,7 +15,7 @@
 
   /* ===================== CONFIG ===================== */
 
-  const HOVER_DELAY_MS = 1500;
+  const HOVER_DELAY_MS = 750;
   const MAX_WIDTH_PX = 520;
   const OFFSET_PX = 14;
 
