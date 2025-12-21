@@ -17,7 +17,7 @@
    * Controls diagnostic output in the browser console.
    * Set to false once validation is complete.
    */
-  const DEBUG = true;
+  const DEBUG = false;
 
   /**
    * Time window used to capture navigation attempts triggered by the click logic.
