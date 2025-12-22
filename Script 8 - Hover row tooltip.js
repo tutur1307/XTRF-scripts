@@ -5,7 +5,6 @@
 // @description  Hover a row -> after 1500ms shows popup with ALL non-empty row columns (no key section). Dedupes identical values. Works across views/iframes.
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
-// @match        https://translations.myelan.net/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
