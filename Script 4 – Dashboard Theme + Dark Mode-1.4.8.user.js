@@ -3,8 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.5.3
 // @description  Dark mode dashboard + smart views inside iframes. Keeps other scripts' colors (overdue/status). Palette included. Cleans up in light mode. + Font size + Hover intensity (FULL table content) + Font override toggle
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
