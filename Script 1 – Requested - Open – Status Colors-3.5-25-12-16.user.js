@@ -3,8 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.5
 // @description  Script 1 (ciblage table fiable) + palette (v6 traverse iframes) + popover modern + 🎨 button
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
-// @match        https://translations.myelan.net/*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
