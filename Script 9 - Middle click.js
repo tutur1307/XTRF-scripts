@@ -1,11 +1,10 @@
 // ==UserScript==
-// @name         Script 9 - Middle click
+// @name         Script 9 - Middle click opens projects in a new tab
 // @namespace    http://tampermonkey.net/
 // @version      6.0.0
 // @description  Middle-click on a Smart View row captures the project URL (typically via window.open) and opens it in a new tab. During capture, JSF submissions and duplicate window.open calls are blocked to keep the dashboard tab in place.
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
 // @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
-// @match        https://translations.myelan.net/xtrf/faces/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
