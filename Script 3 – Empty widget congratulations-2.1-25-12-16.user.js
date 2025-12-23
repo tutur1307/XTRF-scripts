@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.1
 // @description  Replaces the "No items to display." empty-state text with a custom message + light green highlight for selected dashboard widgets
-// @match        https://translations.myelan.net/*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // @noframes
