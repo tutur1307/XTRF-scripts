@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.5
 // @description  Collapse/expand Smart Views by clicking title (NO blank space) + top buttons near Edit Dashboard (independent)
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
