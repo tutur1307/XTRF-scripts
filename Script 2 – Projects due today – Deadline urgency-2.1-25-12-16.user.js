@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.1
 // @description  Highlights rows based on deadline (overdue / within 1 hour / later today) - OVERFLOWS into other views on purpose
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
