@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.4.0
 // @description  Adds row counters to selected Smart Views (hidden when 0). Special handling: Requested/Open split counts. Projects started today shows both row count and Total Agreed sum (right-aligned).
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/genericBrowseIFrame.seam*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
