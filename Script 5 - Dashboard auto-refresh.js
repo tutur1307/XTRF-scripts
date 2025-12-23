@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.4.0
 // @description  Manual + auto refresh for Smart Views (genericBrowseIFrame). No hover targeting. Buttons are cloned from the top toolbar for perfect alignment. Auto button shows a small dot when enabled. No badge.
-// @match        https://translations.myelan.net/xtrf/faces/dashboard2/dashboard.seam*
+// @match        https://translations.myelan.net/xtrf/faces/dashboard2/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
